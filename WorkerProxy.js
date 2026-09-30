@@ -1,4 +1,4 @@
-﻿addEventListener('fetch', event => {
+addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
@@ -16,17 +16,49 @@ async function handleRequest(request) {
     return new Response(`Invalid URL: ${error.message}`, { status: 400 })
   }
 
-  // Preserve the original method, streaming body, cookies and headers.
+  // Build a clean set of headers — strip everything Cloudflare-injected
+  // and all proxy/forwarding headers that confuse the destination's edge.
+  const headersToRemove = [
+    'host',
+    'cf-connecting-ip',
+    'cf-ipcountry',
+    'cf-ray',
+    'cf-visitor',
+    'cf-worker',
+    'cf-ew-via',
+    'x-forwarded-for',
+    'x-forwarded-proto',
+    'x-forwarded-host',
+    'x-real-ip',
+    'cdn-loop',
+    'true-client-ip',
+  ]
+
   const requestHeaders = new Headers(request.headers)
+  for (const h of headersToRemove) {
+    requestHeaders.delete(h)
+  }
+  // Let fetch() set the correct Host automatically based on targetURL
   requestHeaders.set('Host', targetURL.host)
-  const newRequest = new Request(new Request(targetURL, request), {
+
+  const newRequest = new Request(targetURL, {
+    method: request.method,
     headers: requestHeaders,
+    body: request.body,
     redirect: 'manual',
   })
 
   const response = await fetch(newRequest)
 
-  // Preserve redirects, including Location and Set-Cookie, without following them.
+  // Handle 526 specifically — destination's origin cert is broken
+  if (response.status === 526) {
+    return new Response(
+      'The destination site has an invalid SSL certificate on its origin server.',
+      { status: 502 }
+    )
+  }
+
+  // Preserve redirects without following them
   if (response.status >= 300 && response.status < 400) {
     return response
   }

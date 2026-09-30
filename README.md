@@ -28,6 +28,9 @@ This example link demonstrates a proxy to some simple websites.
 
 ## Matters Needing Attention
 
+- Requests forward the original method, streaming body, cookies, and headers, including `Referer`, `Origin`, and `User-Agent`. Only `Host` is set to the target host.
+- Upstream redirects are returned unchanged, including their status, `Location`, and `Set-Cookie` headers. The Worker does not follow them; the client controls whether to follow them.
+
 - Make sure the routing configuration for Cloudflare Worker is correct
 - Make sure to modify  `proxyDomains`  in your code to fit your own domain name
 

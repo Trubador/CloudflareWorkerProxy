@@ -1,4 +1,4 @@
-addEventListener('fetch', event => {
+﻿addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
@@ -9,18 +9,27 @@ async function handleRequest(request) {
     return new Response('Missing ?url= parameter', { status: 400 })
   }
 
-  const targetUrl = url.searchParams.get('url')
+  let targetURL
+  try {
+    targetURL = new URL(url.searchParams.get('url'))
+  } catch (error) {
+    return new Response(`Invalid URL: ${error.message}`, { status: 400 })
+  }
 
-  const response = await fetch(targetUrl, {
-    method: request.method,
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'da-DK,da;q=0.9,en;q=0.8',
-      'Accept-Encoding': 'gzip, deflate, br',
-    },
-    redirect: 'follow',
+  // Preserve the original method, streaming body, cookies and headers.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('Host', targetURL.host)
+  const newRequest = new Request(new Request(targetURL, request), {
+    headers: requestHeaders,
+    redirect: 'manual',
   })
+
+  const response = await fetch(newRequest)
+
+  // Preserve redirects, including Location and Set-Cookie, without following them.
+  if (response.status >= 300 && response.status < 400) {
+    return response
+  }
 
   const newHeaders = new Headers(response.headers)
   newHeaders.set('Access-Control-Allow-Origin', '*')
@@ -29,6 +38,7 @@ async function handleRequest(request) {
 
   return new Response(response.body, {
     status: response.status,
+    statusText: response.statusText,
     headers: newHeaders,
   })
 }
